@@ -1,377 +1,356 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 
 const C = {
-  bg: "#0a0e1a", surface: "#111827", card: "#151e2e", border: "#1e2d45",
-  gold: "#c9a84c", goldLight: "#e8c97a", accent: "#3b82f6",
-  red: "#ef4444", green: "#22c55e", text: "#e2e8f0", muted: "#64748b",
+  bg:"#0a0e1a", surface:"#111827", card:"#151e2e", border:"#1e2d45",
+  gold:"#c9a84c", goldLight:"#e8c97a", accent:"#3b82f6",
+  red:"#ef4444", green:"#22c55e", yellow:"#f59e0b",
+  text:"#e2e8f0", muted:"#64748b", white:"#ffffff",
 };
 
-const STORAGE_KEY = "wealthai_v1";
+const KEY = "wai2";
+function ld(k,fb){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):fb; }catch{ return fb; } }
+function sv(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch{} }
 
-function load(key, fallback) {
-  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; }
-  catch { return fallback; }
-}
-function save(key, val) {
-  try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
-}
-
-function formatKRW(n) {
-  if (!n && n !== 0) return "0원";
-  if (Math.abs(n) >= 100000000) return `${(n / 100000000).toFixed(1)}억원`;
-  if (Math.abs(n) >= 10000) return `${Math.floor(n / 10000).toLocaleString()}만원`;
-  return `${n.toLocaleString()}원`;
+function won(n){
+  if(!n&&n!==0) return "0원";
+  const abs=Math.abs(n);
+  const sign=n<0?"-":"";
+  if(abs>=100000000) return `${sign}${(abs/100000000).toFixed(1)}억`;
+  if(abs>=10000) return `${sign}${Math.floor(abs/10000).toLocaleString()}만원`;
+  return `${sign}${abs.toLocaleString()}원`;
 }
 
-function GaugeBar({ value, max, color }) {
-  const pct = Math.min((value / (max || 1)) * 100, 100);
-  return (
-    <div style={{ background: "#1a2540", borderRadius: 8, height: 8, overflow: "hidden" }}>
-      <div style={{ width: `${pct}%`, height: "100%", background: `linear-gradient(90deg,${color}88,${color})`, borderRadius: 8, transition: "width 0.6s ease" }} />
+function Bar({value,max,color}){
+  const pct=Math.min((value/(max||1))*100,100);
+  return(
+    <div style={{background:"#1a2540",borderRadius:8,height:7,overflow:"hidden"}}>
+      <div style={{width:`${pct}%`,height:"100%",background:`linear-gradient(90deg,${color}77,${color})`,borderRadius:8,transition:"width .5s ease"}}/>
     </div>
   );
 }
 
-function StatCard({ label, value, color, icon }) {
-  return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: "16px 18px", flex: 1, minWidth: 130, position: "relative", overflow: "hidden" }}>
-      <div style={{ position: "absolute", top: -8, right: -8, fontSize: 48, opacity: 0.05 }}>{icon}</div>
-      <div style={{ fontSize: 10, color: C.muted, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 5 }}>{label}</div>
-      <div style={{ fontSize: 18, fontWeight: 700, color: color || C.text, letterSpacing: -0.5 }}>{value}</div>
-    </div>
+function NumInput({value,onChange,placeholder}){
+  const [raw,setRaw]=useState(value===0?"":String(value));
+  useEffect(()=>{ if(document.activeElement?.dataset?.numinput!=="1") setRaw(value===0?"":String(value)); },[value]);
+  return(
+    <input data-numinput="1" type="number" value={raw} placeholder={placeholder||"0"}
+      onChange={e=>{ setRaw(e.target.value); onChange(Number(e.target.value)||0); }}
+      style={{flex:1,background:"#0a0e1a",border:`1px solid ${C.border}`,borderRadius:6,padding:"5px 8px",color:C.text,fontSize:13,outline:"none"}}/>
   );
 }
 
-// ── API Key 설정 화면 ──
-function ApiKeyScreen({ onSave }) {
-  const [key, setKey] = useState("");
-  return (
-    <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Apple SD Gothic Neo',sans-serif" }}>
-      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 24, padding: "40px 36px", width: 400, textAlign: "center" }}>
-        <div style={{ fontSize: 40, marginBottom: 16 }}>💰</div>
-        <div style={{ fontSize: 20, fontWeight: 800, color: C.goldLight, marginBottom: 8 }}>WealthAI Private</div>
-        <div style={{ fontSize: 13, color: C.muted, marginBottom: 28, lineHeight: 1.6 }}>
-          AI 어드바이저 기능을 사용하려면<br />Anthropic API 키가 필요해요.<br />
-          <a href="https://console.anthropic.com" target="_blank" rel="noreferrer" style={{ color: C.accent }}>console.anthropic.com</a>에서 발급받으세요.
-        </div>
-        <input
-          type="password"
-          placeholder="sk-ant-..."
-          value={key}
-          onChange={e => setKey(e.target.value)}
-          style={{ width: "100%", background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px 16px", color: C.text, fontSize: 14, outline: "none", marginBottom: 14 }}
-        />
-        <div style={{ fontSize: 11, color: C.muted, marginBottom: 18 }}>🔒 키는 이 기기 브라우저에만 저장됩니다. 서버로 전송되지 않아요.</div>
-        <button
-          onClick={() => { if (key.startsWith("sk-")) { save("wealthai_apikey", key); onSave(key); } else alert("올바른 API 키를 입력해주세요 (sk-ant-... 로 시작)"); }}
-          style={{ width: "100%", background: `linear-gradient(135deg,${C.gold},${C.goldLight})`, border: "none", borderRadius: 12, padding: "13px", color: "#000", fontWeight: 800, fontSize: 14, cursor: "pointer" }}
-        >시작하기 →</button>
-        <div style={{ marginTop: 14, fontSize: 11, color: C.muted }}>API 없이 대시보드만 쓸 수도 있어요</div>
-        <button onClick={() => onSave(null)} style={{ background: "none", border: "none", color: C.muted, fontSize: 12, cursor: "pointer", marginTop: 6, textDecoration: "underline" }}>대시보드만 사용</button>
-      </div>
-    </div>
-  );
-}
+const DEFAULT_INCOME=[
+  {id:1,name:"기본급",amount:3000000},
+  {id:2,name:"식비",amount:200000},
+  {id:3,name:"교통비",amount:100000},
+];
+const DEFAULT_LOANS=[
+  {id:1,name:"신용대출",balance:15000000,monthly:350000,rate:6.5,dueDay:15},
+  {id:2,name:"카드론",balance:5000000,monthly:200000,rate:12.5,dueDay:20},
+];
+const DEFAULT_CARDS=[
+  {id:1,name:"신한카드",amount:800000,dueDay:14},
+  {id:2,name:"국민카드",amount:450000,dueDay:21},
+];
 
-export default function App() {
-  const [apiKey, setApiKey] = useState(() => load("wealthai_apikey", null));
-  const [showApiInput, setShowApiInput] = useState(false);
+export default function App(){
+  const [income,setIncome]=useState(()=>ld(`${KEY}_income`,DEFAULT_INCOME));
+  const [loans,setLoans]=useState(()=>ld(`${KEY}_loans`,DEFAULT_LOANS));
+  const [cards,setCards]=useState(()=>ld(`${KEY}_cards`,DEFAULT_CARDS));
+  const [tab,setTab]=useState("수입");
+  const [editL,setEditL]=useState(null);
+  const [editC,setEditC]=useState(null);
+  const [editI,setEditI]=useState(null);
 
-  const [salary, setSalary] = useState(() => load(`${STORAGE_KEY}_salary`, 3800000));
-  const [loans, setLoans] = useState(() => load(`${STORAGE_KEY}_loans`, [
-    { id: 1, name: "신용대출", balance: 15000000, monthly: 350000, rate: 6.5, dueDay: 15 },
-    { id: 2, name: "카드론", balance: 5000000, monthly: 200000, rate: 12.5, dueDay: 20 },
-  ]));
-  const [cards, setCards] = useState(() => load(`${STORAGE_KEY}_cards`, [
-    { id: 1, name: "신한카드", amount: 800000, dueDay: 14 },
-    { id: 2, name: "국민카드", amount: 450000, dueDay: 21 },
-  ]));
+  useEffect(()=>sv(`${KEY}_income`,income),[income]);
+  useEffect(()=>sv(`${KEY}_loans`,loans),[loans]);
+  useEffect(()=>sv(`${KEY}_cards`,cards),[cards]);
 
-  const [messages, setMessages] = useState([{
-    role: "assistant",
-    content: "안녕하세요! 💰 WealthAI Private입니다.\n\n대출·카드 정보를 입력하면 이 기기에 자동 저장돼요.\n재무 분석이나 상환 전략을 물어보세요!"
-  }]);
-  const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState("대출");
-  const [editingLoan, setEditingLoan] = useState(null);
-  const [editingCard, setEditingCard] = useState(null);
-  const chatEndRef = useRef(null);
+  const totalIncome=income.reduce((s,i)=>s+i.amount,0);
+  const totalLoanMonthly=loans.reduce((s,l)=>s+l.monthly,0);
+  const totalCardMonthly=cards.reduce((s,c)=>s+c.amount,0);
+  const totalMonthly=totalLoanMonthly+totalCardMonthly;
+  const totalDebt=loans.reduce((s,l)=>s+l.balance,0);
+  const remaining=totalIncome-totalMonthly;
+  const debtRatio=Math.round((totalMonthly/(totalIncome||1))*100);
+  const today=new Date().getDate();
 
-  // 자동 저장
-  useEffect(() => { save(`${STORAGE_KEY}_salary`, salary); }, [salary]);
-  useEffect(() => { save(`${STORAGE_KEY}_loans`, loans); }, [loans]);
-  useEffect(() => { save(`${STORAGE_KEY}_cards`, cards); }, [cards]);
-  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+  const statusColor=debtRatio>50?C.red:debtRatio>30?C.yellow:C.green;
+  const statusText=debtRatio>50?"⚠️ 위험":debtRatio>30?"⚡ 주의":"✅ 양호";
 
-  if (!apiKey && !showApiInput) {
-    return <ApiKeyScreen onSave={(key) => { setApiKey(key); setShowApiInput(false); }} />;
-  }
-
-  const totalMonthly = loans.reduce((s, l) => s + l.monthly, 0) + cards.reduce((s, c) => s + c.amount, 0);
-  const totalDebt = loans.reduce((s, l) => s + l.balance, 0);
-  const remaining = salary - totalMonthly;
-  const debtRatio = Math.round((totalMonthly / (salary || 1)) * 100);
-
-  function buildContext() {
-    return `당신은 세계 최고 수준의 개인 자산관리 AI입니다. 한국 직장인의 부채 관리를 전문적으로 분석해주세요.
-재무 현황:
-- 월 수령액: ${formatKRW(salary)}
-- 대출: ${loans.map(l => `${l.name} 잔액${formatKRW(l.balance)} 월납부${formatKRW(l.monthly)} 금리${l.rate}% 납부일${l.dueDay}일`).join(" / ")}
-- 카드: ${cards.map(c => `${c.name} ${formatKRW(c.amount)} 결제일${c.dueDay}일`).join(" / ")}
-- 월총납부: ${formatKRW(totalMonthly)} / 월잔여: ${formatKRW(remaining)} / 부채비율: ${debtRatio}%
-한국어로 친근하고 전문적으로, 구체적 숫자와 우선순위 중심으로 답변하세요.`;
-  }
-
-  async function sendMessage() {
-    if (!input.trim() || loading) return;
-    if (!apiKey) { alert("AI 기능을 쓰려면 API 키가 필요해요!"); setShowApiInput(true); return; }
-    const userMsg = input.trim();
-    setInput("");
-    setMessages(prev => [...prev, { role: "user", content: userMsg }]);
-    setLoading(true);
-    try {
-      const history = messages.slice(-6).map(m => ({ role: m.role, content: m.content }));
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
-        body: JSON.stringify({ model: "claude-opus-4-5", max_tokens: 1000, system: buildContext(), messages: [...history, { role: "user", content: userMsg }] })
-      });
-      const data = await res.json();
-      if (data.error) throw new Error(data.error.message);
-      setMessages(prev => [...prev, { role: "assistant", content: data.content?.[0]?.text || "응답 오류" }]);
-    } catch (e) {
-      setMessages(prev => [...prev, { role: "assistant", content: `⚠️ 오류: ${e.message}` }]);
-    }
-    setLoading(false);
-  }
-
-  const today = new Date().getDate();
-  const upcoming = [
-    ...loans.map(l => ({ name: l.name, amount: l.monthly, day: l.dueDay, type: "대출" })),
-    ...cards.map(c => ({ name: c.name, amount: c.amount, day: c.dueDay, type: "카드" }))
-  ].sort((a, b) => {
-    const da = a.day >= today ? a.day - today : a.day + 30 - today;
-    const db = b.day >= today ? b.day - today : b.day + 30 - today;
-    return da - db;
+  const upcoming=[
+    ...loans.map(l=>({name:l.name,amount:l.monthly,day:l.dueDay,type:"대출"})),
+    ...cards.map(c=>({name:c.name,amount:c.amount,day:c.dueDay,type:"카드"}))
+  ].sort((a,b)=>{
+    const da=a.day>=today?a.day-today:a.day+30-today;
+    const db=b.day>=today?b.day-today:b.day+30-today;
+    return da-db;
   });
 
-  const IS = { flex: 1, background: "#0a0e1a", border: `1px solid ${C.border}`, borderRadius: 6, padding: "5px 8px", color: C.text, fontSize: 13 };
+  const IS={flex:1,background:"#0a0e1a",border:`1px solid ${C.border}`,borderRadius:6,padding:"5px 8px",color:C.text,fontSize:13,outline:"none"};
+  const BtnSm=(props)=>(
+    <button {...props} style={{background:"none",border:`1px solid ${C.border}`,borderRadius:5,padding:"2px 8px",color:C.muted,fontSize:11,cursor:"pointer",...props.style}}/>
+  );
+  const BtnDel=(props)=>(
+    <button {...props} style={{background:"none",border:`1px solid ${C.red}40`,borderRadius:5,padding:"2px 8px",color:C.red,fontSize:11,cursor:"pointer"}}/>
+  );
 
-  return (
-    <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "'Apple SD Gothic Neo',sans-serif", display: "flex", flexDirection: "column" }}>
-      {/* Header */}
-      <div style={{ background: `linear-gradient(135deg,${C.surface},#0d1529)`, borderBottom: `1px solid ${C.border}`, padding: "13px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 32, height: 32, borderRadius: 9, background: `linear-gradient(135deg,${C.gold},${C.goldLight})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15 }}>💰</div>
+  return(
+    <div style={{minHeight:"100vh",background:C.bg,color:C.text,fontFamily:"'Apple SD Gothic Neo',Pretendard,sans-serif",display:"flex",flexDirection:"column"}}>
+
+      {/* ── Header ── */}
+      <div style={{background:`linear-gradient(135deg,${C.surface},#0d1529)`,borderBottom:`1px solid ${C.border}`,padding:"13px 22px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div style={{width:32,height:32,borderRadius:9,background:`linear-gradient(135deg,${C.gold},${C.goldLight})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15}}>💰</div>
           <div>
-            <div style={{ fontWeight: 800, fontSize: 14, color: "#fff" }}>WealthAI <span style={{ color: C.gold }}>Private</span></div>
-            <div style={{ fontSize: 10, color: C.muted }}>월드클래스 부채관리 시스템</div>
+            <div style={{fontWeight:800,fontSize:14,color:C.white}}>WealthAI <span style={{color:C.gold}}>Private</span></div>
+            <div style={{fontSize:10,color:C.muted}}>개인 부채관리 대시보드 · 무료버전</div>
           </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <button onClick={() => { if (confirm("API 키를 변경하시겠어요?")) { localStorage.removeItem("wealthai_apikey"); setApiKey(null); }}}
-            style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, padding: "4px 10px", color: C.muted, fontSize: 11, cursor: "pointer" }}>
-            🔑 API키
-          </button>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, background: debtRatio > 50 ? "#ef444420" : debtRatio > 30 ? "#f59e0b20" : "#22c55e20", border: `1px solid ${debtRatio > 50 ? C.red : debtRatio > 30 ? "#f59e0b" : C.green}40`, borderRadius: 20, padding: "4px 11px" }}>
-            <div style={{ width: 6, height: 6, borderRadius: "50%", background: debtRatio > 50 ? C.red : debtRatio > 30 ? "#f59e0b" : C.green }} />
-            <span style={{ fontSize: 11, fontWeight: 600, color: debtRatio > 50 ? C.red : debtRatio > 30 ? "#f59e0b" : C.green }}>
-              부채비율 {debtRatio}% {debtRatio > 50 ? "⚠️" : debtRatio > 30 ? "⚡" : "✅"}
-            </span>
+        <div style={{display:"flex",alignItems:"center",gap:8,background:`${statusColor}18`,border:`1px solid ${statusColor}40`,borderRadius:20,padding:"5px 14px"}}>
+          <div style={{width:7,height:7,borderRadius:"50%",background:statusColor}}/>
+          <span style={{fontSize:12,fontWeight:700,color:statusColor}}>부채비율 {debtRatio}% {statusText}</span>
+        </div>
+      </div>
+
+      {/* ── 요약 카드 ── */}
+      <div style={{display:"flex",gap:10,padding:"16px 20px 0",flexWrap:"wrap"}}>
+        {[
+          {label:"총 월수입",value:won(totalIncome),color:C.goldLight,icon:"💼"},
+          {label:"월 납부총액",value:won(totalMonthly),color:C.red,icon:"💳"},
+          {label:"월 잔여",value:won(remaining),color:remaining<0?C.red:remaining<300000?C.yellow:C.green,icon:"✨"},
+          {label:"총 부채잔액",value:won(totalDebt),color:C.yellow,icon:"🏦"},
+        ].map(({label,value,color,icon})=>(
+          <div key={label} style={{flex:"1 1 160px",background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"16px 18px",position:"relative",overflow:"hidden"}}>
+            <div style={{position:"absolute",top:-8,right:-8,fontSize:46,opacity:0.05}}>{icon}</div>
+            <div style={{fontSize:10,color:C.muted,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:5}}>{label}</div>
+            <div style={{fontSize:20,fontWeight:800,color,letterSpacing:-0.5}}>{value}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── 게이지 ── */}
+      <div style={{padding:"14px 20px 0"}}>
+        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px 16px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:8}}>
+            <span style={{color:C.muted}}>납부액 비율</span>
+            <span style={{color:statusColor,fontWeight:700}}>{won(totalMonthly)} / {won(totalIncome)}</span>
+          </div>
+          <Bar value={totalMonthly} max={totalIncome} color={statusColor}/>
+          <div style={{display:"flex",gap:14,marginTop:10}}>
+            <div style={{flex:1,textAlign:"center"}}>
+              <div style={{fontSize:10,color:C.muted,marginBottom:3}}>대출 납부</div>
+              <Bar value={totalLoanMonthly} max={totalIncome} color={C.accent}/>
+              <div style={{fontSize:11,color:C.accent,fontWeight:600,marginTop:3}}>{won(totalLoanMonthly)}</div>
+            </div>
+            <div style={{flex:1,textAlign:"center"}}>
+              <div style={{fontSize:10,color:C.muted,marginBottom:3}}>카드 납부</div>
+              <Bar value={totalCardMonthly} max={totalIncome} color="#a78bfa"/>
+              <div style={{fontSize:11,color:"#a78bfa",fontWeight:600,marginTop:3}}>{won(totalCardMonthly)}</div>
+            </div>
+            <div style={{flex:1,textAlign:"center"}}>
+              <div style={{fontSize:10,color:C.muted,marginBottom:3}}>잔여</div>
+              <Bar value={Math.max(remaining,0)} max={totalIncome} color={C.green}/>
+              <div style={{fontSize:11,color:remaining<0?C.red:C.green,fontWeight:600,marginTop:3}}>{won(remaining)}</div>
+            </div>
           </div>
         </div>
       </div>
 
-      <div style={{ display: "flex", flex: 1, overflow: "hidden", height: "calc(100vh - 62px)" }}>
-        {/* Left Panel */}
-        <div style={{ width: 340, minWidth: 280, background: C.surface, borderRight: `1px solid ${C.border}`, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-          <div style={{ padding: "14px 14px 0" }}>
-            <div style={{ display: "flex", gap: 7, marginBottom: 7 }}>
-              <StatCard label="월 수령액" value={formatKRW(salary)} icon="💼" color={C.goldLight} />
-              <StatCard label="월납부총액" value={formatKRW(totalMonthly)} icon="💳" color={C.red} />
-            </div>
-            <div style={{ display: "flex", gap: 7, marginBottom: 12 }}>
-              <StatCard label="총부채" value={formatKRW(totalDebt)} icon="🏦" color="#f59e0b" />
-              <StatCard label="월잔여" value={formatKRW(remaining)} icon="✨" color={remaining < 0 ? C.red : remaining < 300000 ? "#f59e0b" : C.green} />
-            </div>
-            <div style={{ background: C.card, borderRadius: 12, padding: "11px 13px", border: `1px solid ${C.border}`, marginBottom: 10 }}>
-              <div style={{ fontSize: 10, color: C.muted, marginBottom: 5 }}>월 수령액 조정</div>
-              <input type="range" min={1000000} max={10000000} step={100000} value={salary}
-                onChange={e => setSalary(Number(e.target.value))}
-                style={{ width: "100%", accentColor: C.gold, marginBottom: 3 }} />
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11 }}>
-                <span style={{ color: C.muted }}>100만</span>
-                <span style={{ color: C.goldLight, fontWeight: 700 }}>{formatKRW(salary)}</span>
-                <span style={{ color: C.muted }}>1,000만</span>
-              </div>
-            </div>
-            <GaugeBar value={totalMonthly} max={salary} color={debtRatio > 50 ? C.red : C.gold} />
-            <div style={{ fontSize: 10, color: C.muted, marginTop: 4, marginBottom: 12 }}>월급의 {debtRatio}% 납부 중</div>
-          </div>
+      {/* ── 탭 ── */}
+      <div style={{display:"flex",borderBottom:`1px solid ${C.border}`,margin:"16px 20px 0",paddingBottom:0}}>
+        {["수입","대출","카드","일정"].map(t=>(
+          <button key={t} onClick={()=>setTab(t)} style={{background:"none",border:"none",cursor:"pointer",padding:"9px 16px",fontSize:13,fontWeight:600,color:tab===t?C.goldLight:C.muted,borderBottom:tab===t?`2px solid ${C.gold}`:"2px solid transparent"}}>
+            {t==="수입"?"💼 수입":t==="대출"?"🏦 대출":t==="카드"?"💳 카드":"📅 일정"}
+          </button>
+        ))}
+      </div>
 
-          <div style={{ display: "flex", borderBottom: `1px solid ${C.border}`, paddingLeft: 14 }}>
-            {["대출", "카드", "일정"].map(t => (
-              <button key={t} onClick={() => setActiveTab(t)} style={{ background: "none", border: "none", cursor: "pointer", padding: "8px 12px", fontSize: 13, fontWeight: 600, color: activeTab === t ? C.goldLight : C.muted, borderBottom: activeTab === t ? `2px solid ${C.gold}` : "2px solid transparent" }}>{t}</button>
-            ))}
-          </div>
+      {/* ── 탭 콘텐츠 ── */}
+      <div style={{flex:1,overflowY:"auto",padding:"14px 20px 24px"}}>
 
-          <div style={{ flex: 1, overflowY: "auto", padding: "12px 14px" }}>
-            {activeTab === "대출" && (
-              <>
-                {loans.map(loan => (
-                  <div key={loan.id} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 12, marginBottom: 10 }}>
-                    {editingLoan === loan.id ? (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-                        {[["대출명","name","text"],["잔액(원)","balance","number"],["월납부(원)","monthly","number"],["금리(%)","rate","number"],["납부일","dueDay","number"]].map(([lbl,key,tp]) => (
-                          <div key={key} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                            <span style={{ fontSize: 11, color: C.muted, width: 64, flexShrink: 0 }}>{lbl}</span>
-                            <input type={tp} value={loan[key]} style={IS}
-                              onChange={e => setLoans(p => p.map(l => l.id === loan.id ? { ...l, [key]: tp === "number" ? Number(e.target.value) : e.target.value } : l))} />
-                          </div>
-                        ))}
-                        <button onClick={() => setEditingLoan(null)} style={{ background: C.gold, border: "none", borderRadius: 8, padding: "6px", color: "#000", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>저장 ✓</button>
+        {/* 수입 탭 */}
+        {tab==="수입"&&(
+          <div style={{maxWidth:600}}>
+            <div style={{fontSize:12,color:C.muted,marginBottom:12}}>급여·수당 항목을 입력하세요. 모두 합산해서 월수입을 계산합니다.</div>
+            {income.map(item=>(
+              <div key={item.id} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:13,marginBottom:10}}>
+                {editI===item.id?(
+                  <div style={{display:"flex",flexDirection:"column",gap:7}}>
+                    {[["항목명","name","text"],["금액(원)","amount","number"]].map(([lbl,key,tp])=>(
+                      <div key={key} style={{display:"flex",alignItems:"center",gap:8}}>
+                        <span style={{fontSize:11,color:C.muted,width:60,flexShrink:0}}>{lbl}</span>
+                        {tp==="number"
+                          ?<NumInput value={item[key]} onChange={v=>setIncome(p=>p.map(i=>i.id===item.id?{...i,[key]:v}:i))}/>
+                          :<input type="text" value={item[key]} style={IS} onChange={e=>setIncome(p=>p.map(i=>i.id===item.id?{...i,[key]:e.target.value}:i))}/>
+                        }
                       </div>
-                    ) : (
-                      <>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 7 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                            <span style={{ fontSize: 13, fontWeight: 700 }}>{loan.name}</span>
-                            <span style={{ fontSize: 10, background: "#f59e0b20", color: "#f59e0b", borderRadius: 4, padding: "1px 5px" }}>{loan.rate}%</span>
-                          </div>
-                          <div style={{ display: "flex", gap: 4 }}>
-                            <button onClick={() => setEditingLoan(loan.id)} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 5, padding: "2px 7px", color: C.muted, fontSize: 11, cursor: "pointer" }}>편집</button>
-                            <button onClick={() => setLoans(p => p.filter(l => l.id !== loan.id))} style={{ background: "none", border: `1px solid ${C.red}40`, borderRadius: 5, padding: "2px 7px", color: C.red, fontSize: 11, cursor: "pointer" }}>삭제</button>
-                          </div>
-                        </div>
-                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: C.muted, marginBottom: 7 }}>
-                          <span>잔액 <b style={{ color: C.text }}>{formatKRW(loan.balance)}</b></span>
-                          <span>월 <b style={{ color: C.red }}>{formatKRW(loan.monthly)}</b></span>
-                          <span>매월 {loan.dueDay}일</span>
-                        </div>
-                        <GaugeBar value={loan.monthly} max={totalMonthly} color={C.accent} />
-                      </>
-                    )}
+                    ))}
+                    <button onClick={()=>setEditI(null)} style={{background:C.gold,border:"none",borderRadius:8,padding:"6px",color:"#000",fontSize:12,fontWeight:700,cursor:"pointer"}}>저장 ✓</button>
                   </div>
-                ))}
-                <button onClick={() => { const id = Date.now(); setLoans(p => [...p, { id, name: "새 대출", balance: 0, monthly: 0, rate: 5.0, dueDay: 15 }]); setEditingLoan(id); }}
-                  style={{ width: "100%", background: "none", border: `1px dashed ${C.border}`, borderRadius: 12, padding: "9px", color: C.muted, fontSize: 13, cursor: "pointer" }}>
-                  + 대출 추가
-                </button>
-              </>
-            )}
-            {activeTab === "카드" && (
-              <>
-                {cards.map(card => (
-                  <div key={card.id} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 12, marginBottom: 10 }}>
-                    {editingCard === card.id ? (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-                        {[["카드명","name","text"],["청구액(원)","amount","number"],["결제일","dueDay","number"]].map(([lbl,key,tp]) => (
-                          <div key={key} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                            <span style={{ fontSize: 11, color: C.muted, width: 64, flexShrink: 0 }}>{lbl}</span>
-                            <input type={tp} value={card[key]} style={IS}
-                              onChange={e => setCards(p => p.map(c => c.id === card.id ? { ...c, [key]: tp === "number" ? Number(e.target.value) : e.target.value } : c))} />
-                          </div>
-                        ))}
-                        <button onClick={() => setEditingCard(null)} style={{ background: C.gold, border: "none", borderRadius: 8, padding: "6px", color: "#000", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>저장 ✓</button>
-                      </div>
-                    ) : (
-                      <>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 7 }}>
-                          <span style={{ fontSize: 13, fontWeight: 700 }}>💳 {card.name}</span>
-                          <div style={{ display: "flex", gap: 4 }}>
-                            <button onClick={() => setEditingCard(card.id)} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 5, padding: "2px 7px", color: C.muted, fontSize: 11, cursor: "pointer" }}>편집</button>
-                            <button onClick={() => setCards(p => p.filter(c => c.id !== card.id))} style={{ background: "none", border: `1px solid ${C.red}40`, borderRadius: 5, padding: "2px 7px", color: C.red, fontSize: 11, cursor: "pointer" }}>삭제</button>
-                          </div>
-                        </div>
-                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: C.muted }}>
-                          <span>청구액 <b style={{ color: C.red }}>{formatKRW(card.amount)}</b></span>
-                          <span>결제일 매월 {card.dueDay}일</span>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                ))}
-                <button onClick={() => { const id = Date.now(); setCards(p => [...p, { id, name: "새 카드", amount: 0, dueDay: 15 }]); setEditingCard(id); }}
-                  style={{ width: "100%", background: "none", border: `1px dashed ${C.border}`, borderRadius: 12, padding: "9px", color: C.muted, fontSize: 13, cursor: "pointer" }}>
-                  + 카드 추가
-                </button>
-              </>
-            )}
-            {activeTab === "일정" && (
-              <>
-                <div style={{ fontSize: 11, color: C.muted, marginBottom: 10 }}>오늘 {today}일 기준 납부 순서</div>
-                {upcoming.map((item, i) => {
-                  const daysLeft = item.day >= today ? item.day - today : item.day + 30 - today;
-                  const isUrgent = daysLeft <= 3;
-                  return (
-                    <div key={i} style={{ background: C.card, border: `1px solid ${isUrgent ? C.red + "50" : C.border}`, borderRadius: 12, padding: "11px 13px", marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <div>
-                        <div style={{ fontSize: 13, fontWeight: 600 }}>{item.name}</div>
-                        <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>
-                          <span style={{ background: item.type === "대출" ? "#3b82f620" : "#8b5cf620", color: item.type === "대출" ? C.accent : "#a78bfa", padding: "1px 5px", borderRadius: 4, marginRight: 5 }}>{item.type}</span>
-                          매월 {item.day}일
-                        </div>
-                      </div>
-                      <div style={{ textAlign: "right" }}>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: C.red }}>{formatKRW(item.amount)}</div>
-                        <div style={{ fontSize: 10, color: isUrgent ? C.red : C.muted, marginTop: 2 }}>{daysLeft === 0 ? "🔴 오늘!" : `D-${daysLeft}`}</div>
-                      </div>
+                ):(
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <span style={{fontSize:13,fontWeight:700}}>{item.name}</span>
                     </div>
-                  );
-                })}
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Chat Panel */}
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-          <div style={{ padding: "12px 20px", borderBottom: `1px solid ${C.border}`, background: C.surface }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: C.goldLight }}>🤖 AI 자산관리 어드바이저</div>
-            <div style={{ fontSize: 10, color: C.muted }}>{apiKey ? "AI 연결됨 · 입력 데이터 기반 실시간 분석" : "⚠️ API 키 없음 · 대시보드만 사용 중"}</div>
-          </div>
-          <div style={{ flex: 1, overflowY: "auto", padding: "18px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
-            {messages.map((msg, i) => (
-              <div key={i} style={{ display: "flex", justifyContent: msg.role === "user" ? "flex-end" : "flex-start" }}>
-                {msg.role === "assistant" && (
-                  <div style={{ width: 28, height: 28, borderRadius: 8, flexShrink: 0, marginRight: 9, background: `linear-gradient(135deg,${C.gold},${C.goldLight})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>🤖</div>
+                    <div style={{display:"flex",alignItems:"center",gap:12}}>
+                      <span style={{fontSize:15,fontWeight:800,color:C.green}}>{won(item.amount)}</span>
+                      <BtnSm onClick={()=>setEditI(item.id)}>편집</BtnSm>
+                      <BtnDel onClick={()=>setIncome(p=>p.filter(i=>i.id!==item.id))}>삭제</BtnDel>
+                    </div>
+                  </div>
                 )}
-                <div style={{ maxWidth: "75%", background: msg.role === "user" ? `linear-gradient(135deg,${C.accent},#2563eb)` : C.card, border: `1px solid ${msg.role === "user" ? "transparent" : C.border}`, borderRadius: msg.role === "user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px", padding: "10px 14px", fontSize: 13, lineHeight: 1.65, whiteSpace: "pre-wrap" }}>
-                  {msg.content}
-                </div>
               </div>
             ))}
-            {loading && (
-              <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-                <div style={{ width: 28, height: 28, borderRadius: 8, background: `linear-gradient(135deg,${C.gold},${C.goldLight})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>🤖</div>
-                <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: "16px 16px 16px 4px", padding: "12px 16px", display: "flex", gap: 5 }}>
-                  {[0,1,2].map(j => <div key={j} style={{ width: 7, height: 7, borderRadius: "50%", background: C.gold, animation: `bounce 1.2s ease-in-out ${j*0.2}s infinite` }} />)}
-                </div>
-              </div>
-            )}
-            <div ref={chatEndRef} />
-          </div>
-          <div style={{ padding: "0 20px 10px", display: "flex", gap: 7, flexWrap: "wrap" }}>
-            {["우선 갚아야 할 빚은?", "이번달 절약 포인트", "고금리부터 갚는 전략", "비상금 얼마 필요해?"].map(q => (
-              <button key={q} onClick={() => setInput(q)}
-                style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 20, padding: "4px 11px", color: C.muted, fontSize: 11, cursor: "pointer" }}>
-                {q}
-              </button>
-            ))}
-          </div>
-          <div style={{ padding: "12px 20px", borderTop: `1px solid ${C.border}`, background: C.surface, display: "flex", gap: 9 }}>
-            <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && sendMessage()}
-              placeholder={apiKey ? "재무 상황을 물어보세요... (Enter)" : "API 키를 설정하면 AI와 대화할 수 있어요"}
-              style={{ flex: 1, background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "11px 15px", color: C.text, fontSize: 13, outline: "none" }} />
-            <button onClick={sendMessage} disabled={loading || !input.trim()}
-              style={{ background: loading ? C.border : `linear-gradient(135deg,${C.gold},${C.goldLight})`, border: "none", borderRadius: 12, padding: "11px 18px", color: "#000", fontWeight: 700, fontSize: 13, cursor: loading ? "not-allowed" : "pointer" }}>
-              전송 →
+            <div style={{background:C.card,border:`1px solid ${C.gold}40`,borderRadius:12,padding:"12px 16px",marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span style={{fontSize:13,color:C.muted,fontWeight:600}}>월 총수입</span>
+              <span style={{fontSize:20,fontWeight:800,color:C.goldLight}}>{won(totalIncome)}</span>
+            </div>
+            <button onClick={()=>{const id=Date.now();setIncome(p=>[...p,{id,name:"새 수당",amount:0}]);setEditI(id);}}
+              style={{width:"100%",background:"none",border:`1px dashed ${C.border}`,borderRadius:12,padding:"10px",color:C.muted,fontSize:13,cursor:"pointer"}}>
+              + 수당 항목 추가
             </button>
           </div>
-        </div>
+        )}
+
+        {/* 대출 탭 */}
+        {tab==="대출"&&(
+          <div style={{maxWidth:600}}>
+            {loans.map(loan=>(
+              <div key={loan.id} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:13,marginBottom:10}}>
+                {editL===loan.id?(
+                  <div style={{display:"flex",flexDirection:"column",gap:7}}>
+                    {[["대출명","name","text"],["잔액(원)","balance","number"],["월납부(원)","monthly","number"],["금리(%)","rate","number"],["납부일","dueDay","number"]].map(([lbl,key,tp])=>(
+                      <div key={key} style={{display:"flex",alignItems:"center",gap:8}}>
+                        <span style={{fontSize:11,color:C.muted,width:68,flexShrink:0}}>{lbl}</span>
+                        {tp==="number"
+                          ?<NumInput value={loan[key]} onChange={v=>setLoans(p=>p.map(l=>l.id===loan.id?{...l,[key]:v}:l))}/>
+                          :<input type="text" value={loan[key]} style={IS} onChange={e=>setLoans(p=>p.map(l=>l.id===loan.id?{...l,[key]:e.target.value}:l))}/>
+                        }
+                      </div>
+                    ))}
+                    <button onClick={()=>setEditL(null)} style={{background:C.gold,border:"none",borderRadius:8,padding:"6px",color:"#000",fontSize:12,fontWeight:700,cursor:"pointer"}}>저장 ✓</button>
+                  </div>
+                ):(
+                  <>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                      <div style={{display:"flex",alignItems:"center",gap:7}}>
+                        <span style={{fontSize:13,fontWeight:700}}>{loan.name}</span>
+                        <span style={{fontSize:10,background:"#f59e0b20",color:C.yellow,borderRadius:4,padding:"1px 6px"}}>{loan.rate}%</span>
+                      </div>
+                      <div style={{display:"flex",gap:5}}>
+                        <BtnSm onClick={()=>setEditL(loan.id)}>편집</BtnSm>
+                        <BtnDel onClick={()=>setLoans(p=>p.filter(l=>l.id!==loan.id))}>삭제</BtnDel>
+                      </div>
+                    </div>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:C.muted,marginBottom:8}}>
+                      <span>잔액 <b style={{color:C.text}}>{won(loan.balance)}</b></span>
+                      <span>월납부 <b style={{color:C.red}}>{won(loan.monthly)}</b></span>
+                      <span>매월 {loan.dueDay}일</span>
+                    </div>
+                    <Bar value={loan.monthly} max={totalMonthly} color={C.accent}/>
+                    <div style={{fontSize:10,color:C.muted,marginTop:4}}>
+                      예상 완납까지 약 {loan.monthly>0?Math.ceil(loan.balance/loan.monthly):"∞"}개월
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+            <button onClick={()=>{const id=Date.now();setLoans(p=>[...p,{id,name:"새 대출",balance:0,monthly:0,rate:5.0,dueDay:15}]);setEditL(id);}}
+              style={{width:"100%",background:"none",border:`1px dashed ${C.border}`,borderRadius:12,padding:"10px",color:C.muted,fontSize:13,cursor:"pointer"}}>
+              + 대출 추가
+            </button>
+          </div>
+        )}
+
+        {/* 카드 탭 */}
+        {tab==="카드"&&(
+          <div style={{maxWidth:600}}>
+            {cards.map(card=>(
+              <div key={card.id} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:13,marginBottom:10}}>
+                {editC===card.id?(
+                  <div style={{display:"flex",flexDirection:"column",gap:7}}>
+                    {[["카드명","name","text"],["청구액(원)","amount","number"],["결제일","dueDay","number"]].map(([lbl,key,tp])=>(
+                      <div key={key} style={{display:"flex",alignItems:"center",gap:8}}>
+                        <span style={{fontSize:11,color:C.muted,width:68,flexShrink:0}}>{lbl}</span>
+                        {tp==="number"
+                          ?<NumInput value={card[key]} onChange={v=>setCards(p=>p.map(c=>c.id===card.id?{...c,[key]:v}:c))}/>
+                          :<input type="text" value={card[key]} style={IS} onChange={e=>setCards(p=>p.map(c=>c.id===card.id?{...c,[key]:e.target.value}:c))}/>
+                        }
+                      </div>
+                    ))}
+                    <button onClick={()=>setEditC(null)} style={{background:C.gold,border:"none",borderRadius:8,padding:"6px",color:"#000",fontSize:12,fontWeight:700,cursor:"pointer"}}>저장 ✓</button>
+                  </div>
+                ):(
+                  <>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:7}}>
+                      <span style={{fontSize:13,fontWeight:700}}>💳 {card.name}</span>
+                      <div style={{display:"flex",gap:5}}>
+                        <BtnSm onClick={()=>setEditC(card.id)}>편집</BtnSm>
+                        <BtnDel onClick={()=>setCards(p=>p.filter(c=>c.id!==card.id))}>삭제</BtnDel>
+                      </div>
+                    </div>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:C.muted}}>
+                      <span>청구액 <b style={{color:C.red}}>{won(card.amount)}</b></span>
+                      <span>결제일 매월 {card.dueDay}일</span>
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+            <button onClick={()=>{const id=Date.now();setCards(p=>[...p,{id,name:"새 카드",amount:0,dueDay:15}]);setEditC(id);}}
+              style={{width:"100%",background:"none",border:`1px dashed ${C.border}`,borderRadius:12,padding:"10px",color:C.muted,fontSize:13,cursor:"pointer"}}>
+              + 카드 추가
+            </button>
+          </div>
+        )}
+
+        {/* 일정 탭 */}
+        {tab==="일정"&&(
+          <div style={{maxWidth:600}}>
+            <div style={{fontSize:12,color:C.muted,marginBottom:12}}>오늘 {today}일 기준 · 가까운 납부일 순서</div>
+            {upcoming.length===0&&<div style={{color:C.muted,fontSize:13,textAlign:"center",padding:"40px 0"}}>납부 일정이 없어요</div>}
+            {upcoming.map((item,i)=>{
+              const daysLeft=item.day>=today?item.day-today:item.day+30-today;
+              const isToday=daysLeft===0;
+              const isUrgent=daysLeft<=3;
+              return(
+                <div key={i} style={{background:C.card,border:`1px solid ${isUrgent?C.red+"50":C.border}`,borderRadius:12,padding:"13px 16px",marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div>
+                    <div style={{fontSize:14,fontWeight:700,marginBottom:4}}>{item.name}</div>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      <span style={{fontSize:10,background:item.type==="대출"?"#3b82f620":"#8b5cf620",color:item.type==="대출"?C.accent:"#a78bfa",padding:"1px 6px",borderRadius:4}}>{item.type}</span>
+                      <span style={{fontSize:11,color:C.muted}}>매월 {item.day}일</span>
+                    </div>
+                  </div>
+                  <div style={{textAlign:"right"}}>
+                    <div style={{fontSize:16,fontWeight:800,color:C.red,marginBottom:4}}>{won(item.amount)}</div>
+                    <div style={{fontSize:12,fontWeight:700,color:isToday?C.red:isUrgent?C.yellow:C.muted}}>
+                      {isToday?"🔴 오늘!":isUrgent?`⚡ D-${daysLeft}`:`D-${daysLeft}`}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            {/* 이달 납부 요약 */}
+            <div style={{background:C.card,border:`1px solid ${C.gold}30`,borderRadius:12,padding:"14px 16px",marginTop:6}}>
+              <div style={{fontSize:11,color:C.muted,marginBottom:10}}>이달 납부 요약</div>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+                <span style={{fontSize:12,color:C.muted}}>대출 합계</span>
+                <span style={{fontSize:13,fontWeight:700,color:C.accent}}>{won(totalLoanMonthly)}</span>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}>
+                <span style={{fontSize:12,color:C.muted}}>카드 합계</span>
+                <span style={{fontSize:13,fontWeight:700,color:"#a78bfa"}}>{won(totalCardMonthly)}</span>
+              </div>
+              <div style={{borderTop:`1px solid ${C.border}`,paddingTop:10,display:"flex",justifyContent:"space-between"}}>
+                <span style={{fontSize:13,fontWeight:700,color:C.text}}>총 납부</span>
+                <span style={{fontSize:16,fontWeight:800,color:C.red}}>{won(totalMonthly)}</span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
-      <style>{`@keyframes bounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-7px)}}`}</style>
     </div>
   );
 }
